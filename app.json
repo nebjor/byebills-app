@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "owner": "luz1fer",
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "byeBills uses the camera to capture your receipts.",
+          "photosPermission": "byeBills only opens your library when you pick an existing receipt photo."
+        }
+      ],
+      "expo-sharing",
+      "@react-native-community/datetimepicker",
+      "@react-native-google-signin/google-signin",
+      "expo-apple-authentication"
+    ],
+    "android": {
+      "package": "com.luz1fer.byebills"
+    },
+    "ios": {
+      "bundleIdentifier": "com.luz1fer.byebills",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "usesAppleSignIn": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "f680d7b0-a4d4-43eb-bed5-c0df6642f388"
+      }
+    }
+  }
+}
