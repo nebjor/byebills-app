@@ -69,7 +69,7 @@ const makeStyles = (c: Palette) =>
     listEmpty: { paddingVertical: 24, textAlign: "center" },
     divider: { height: 1, backgroundColor: c.divider },
     dim: { opacity: 0.22 },
-    overlay: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", padding: 24 },
+    overlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", padding: 24 },
     emptyCard: { alignItems: "center", gap: 12, maxWidth: 360 },
     emptyBillie: { width: 108, height: 108, marginBottom: 2 },
     emptyCta: { marginTop: 4 },
@@ -331,7 +331,4 @@ export default function Dashboard() {
             </Pressable>
           </Card>
         </View>
-      ) : null}
-    </Screen>
-  );
-}
+      ) : n

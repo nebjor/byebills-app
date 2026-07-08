@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { Button, Text } from "@/components";
 import { useUser } from "@/data/userStore";
+import { identify, track } from "@/lib/analytics";
 import { supabase } from "@/lib/supabase";
 import { type Palette, useTheme, useThemedStyles } from "@/theme";
 
@@ -115,11 +116,13 @@ export default function SignIn() {
         Alert.alert("Sign-in failed", "No ID token returned by Google.");
         return;
       }
-      const { error } = await supabase.auth.signInWithIdToken({ provider: "google", token: idToken });
+      const { data, error } = await supabase.auth.signInWithIdToken({ provider: "google", token: idToken });
       if (error) {
         Alert.alert("Supabase rejected sign-in", error.message);
         return;
       }
+      if (data.user) identify(data.user.id);
+      track("signed_in", { provider: "google" });
       await prefillName(info.data?.user?.name);
       // Navigation handled by the auth gate once the session propagates.
     } catch (e) {
@@ -136,11 +139,13 @@ export default function SignIn() {
         ],
       });
       if (!cred.identityToken) return;
-      const { error } = await supabase.auth.signInWithIdToken({ provider: "apple", token: cred.identityToken });
+      const { data, error } = await supabase.auth.signInWithIdToken({ provider: "apple", token: cred.identityToken });
       if (error) {
         Alert.alert("Supabase rejected sign-in", error.message);
         return;
       }
+      if (data.user) identify(data.user.id);
+      track("signed_in", { provider: "apple" });
       await prefillName(cred.fullName?.givenName ?? null);
       // Navigation handled by the auth gate once the session propagates.
     } catch (e) {

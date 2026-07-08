@@ -8,6 +8,7 @@ import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 
 import { Button, Screen, Text, TextField } from "@/components";
 import { useHustles } from "@/data/hustleStore";
 import { useTransactions } from "@/data/store";
+import { track } from "@/lib/analytics";
 import { formatDate, groupForDate, parseISODate, toISODate } from "@/lib/date";
 import { scheduleDailyScanReminder } from "@/lib/notifications";
 import { persistReceipt } from "@/lib/receipt";
@@ -149,6 +150,7 @@ export default function Review() {
       date: savedIso,
       imageUri: storedUri,
     });
+    track("transaction_saved", { scanned, type });
 
     try {
       const asked = await AsyncStorage.getItem(ASKED_KEY);
@@ -176,7 +178,7 @@ export default function Review() {
     <Screen>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.topBar}>
-          <Pressable style={styles.closeBtn} onPress={finish} hitSlop={8}>
+          <Pressable style={styles.closeBtn} onPress={() => finish(false)} hitSlop={8}>
             <Text style={styles.closeGlyph}>✕</Text>
           </Pressable>
           <Text variant="h2">{uri ? "Review details" : "New transaction"}</Text>

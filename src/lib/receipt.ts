@@ -58,3 +58,12 @@ export async function deleteReceipt(uri?: string): Promise<void> {
     // ignore
   }
 }
+
+/** Delete every stored receipt image (used on account deletion). */
+export async function clearAllReceipts(): Promise<void> {
+  try {
+    await FileSystem.deleteAsync(RECEIPTS_DIR, { idempotent: true });
+  } catch {
+    // ignore
+  }
+}

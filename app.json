@@ -12,7 +12,8 @@
       "expo-sharing",
       "@react-native-community/datetimepicker",
       "@react-native-google-signin/google-signin",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      "expo-localization"
     ],
     "android": {
       "package": "com.luz1fer.byebills"

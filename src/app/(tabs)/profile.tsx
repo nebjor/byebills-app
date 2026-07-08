@@ -6,6 +6,7 @@ import { Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Vi
 import { Button, Card, Screen, Text } from "@/components";
 import { useAuth } from "@/data/authStore";
 import { useUser } from "@/data/userStore";
+import { clearAllReceipts } from "@/lib/receipt";
 import { type Palette, radii, useTheme, useThemedStyles } from "@/theme";
 
 const makeStyles = (c: Palette) =>
@@ -65,7 +66,7 @@ export default function Profile() {
   const { colors, isDark, setMode } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const { user } = useUser();
-  const { signOut } = useAuth();
+  const { signOut, session } = useAuth();
   const [checking, setChecking] = useState(false);
 
   const onSignOut = () => {
@@ -78,6 +79,44 @@ export default function Profile() {
   const onResetOnboarding = async () => {
     await AsyncStorage.multiRemove(["byebills:onboarded", "byebills:askedDailyScan"]);
     await signOut();
+  };
+
+  const onDeleteAccount = () => {
+    Alert.alert("Delete account", "All your data will be permanently lost. Are you sure?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          // Delete the server-side account (auth user + data), best-effort.
+          const base = process.env.EXPO_PUBLIC_API_BASE;
+          if (base && session?.access_token) {
+            try {
+              await fetch(`${base}/api/account/delete`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${session.access_token}` },
+              });
+            } catch {
+              // still clear local + sign out below
+            }
+          }
+          try {
+            await clearAllReceipts();
+          } catch {
+            // ignore
+          }
+          await AsyncStorage.multiRemove([
+            "byebills:onboarded",
+            "byebills:askedDailyScan",
+            "byebills:transactions",
+            "byebills:hustles",
+            "byebills:user",
+            "byebills:colorMode",
+          ]);
+          await signOut();
+        },
+      },
+    ]);
   };
 
   const onCheckUpdate = async () => {
@@ -225,7 +264,15 @@ export default function Profile() {
             style={styles.signOut}
             onPress={onResetOnboarding}
           />
-        ) : null}
+        ) : (
+          <Button
+            label="Delete account"
+            variant="destructive"
+            fullWidth
+            style={styles.signOut}
+            onPress={onDeleteAccount}
+          />
+        )}
       </ScrollView>
     </Screen>
   );
