@@ -5,6 +5,7 @@ import { Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Vi
 
 import { Button, Card, Screen, Text } from "@/components";
 import { useAuth } from "@/data/authStore";
+import { useBilling } from "@/data/billingStore";
 import { useUser } from "@/data/userStore";
 import { clearAllReceipts } from "@/lib/receipt";
 import { type Palette, radii, useTheme, useThemedStyles } from "@/theme";
@@ -67,6 +68,7 @@ export default function Profile() {
   const styles = useThemedStyles(makeStyles);
   const { user } = useUser();
   const { signOut, session } = useAuth();
+  const { isPro, plan, used, freeLimit, cancelPro } = useBilling();
   const [checking, setChecking] = useState(false);
 
   const onSignOut = () => {
@@ -126,6 +128,7 @@ export default function Profile() {
     Alert.alert("byeBills", "You're on the latest version (1.0.0).");
   };
 
+  // Opens the platform subscription-management screen.
   const onManageSubscription = () => {
     const url =
       Platform.OS === "ios"
@@ -150,9 +153,9 @@ export default function Profile() {
             <Text variant="small" color={colors.ink600}>
               {user.email}
             </Text>
-            <View style={styles.tag}>
-              <Text weight="bold" color={colors.brandInk} style={styles.tagText}>
-                Side hustler · Free plan
+            <View style={[styles.tag, isPro && { backgroundColor: colors.purpleTint }]}>
+              <Text weight="bold" color={isPro ? colors.purpleInk : colors.brandInk} style={styles.tagText}>
+                {isPro ? `Side hustler · Pro (${plan === "annual" ? "yearly" : "monthly"})` : "Side hustler · Free plan"}
               </Text>
             </View>
           </View>
@@ -202,6 +205,27 @@ export default function Profile() {
           SUBSCRIPTION
         </Text>
         <Card flush style={styles.menu}>
+          {!isPro ? (
+            <>
+              <Pressable style={styles.row} onPress={() => router.push("/paywall")}>
+                <View style={[styles.iconWrap, { backgroundColor: colors.purpleTint }]}>
+                  <Text style={styles.icon}>⭐</Text>
+                </View>
+                <View style={styles.flex}>
+                  <Text weight="bold" style={styles.rowLabel}>
+                    Upgrade to Pro
+                  </Text>
+                  <Text variant="small" color={colors.ink600}>
+                    {used} of {freeLimit} free scans used this month
+                  </Text>
+                </View>
+                <Text color={colors.ink400} style={styles.chevron}>
+                  ›
+                </Text>
+              </Pressable>
+              <View style={styles.divider} />
+            </>
+          ) : null}
           <Pressable style={styles.row} onPress={onManageSubscription}>
             <View style={styles.iconWrap}>
               <Text style={styles.icon}>💳</Text>
@@ -257,13 +281,21 @@ export default function Profile() {
         <Button label="Sign out" variant="destructive" fullWidth style={styles.signOut} onPress={onSignOut} />
 
         {__DEV__ ? (
-          <Button
-            label="Reset onboarding (dev)"
-            variant="tertiary"
-            fullWidth
-            style={styles.signOut}
-            onPress={onResetOnboarding}
-          />
+          <>
+            <Button
+              label="Reset onboarding (dev)"
+              variant="tertiary"
+              fullWidth
+              style={styles.signOut}
+              onPress={onResetOnboarding}
+            />
+            <Button
+              label={isPro ? "Cancel Pro (dev)" : "Activate Pro (dev)"}
+              variant="tertiary"
+              fullWidth
+              onPress={() => (isPro ? cancelPro() : router.push("/paywall"))}
+            />
+          </>
         ) : (
           <Button
             label="Delete account"

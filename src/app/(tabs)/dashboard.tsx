@@ -331,4 +331,7 @@ export default function Dashboard() {
             </Pressable>
           </Card>
         </View>
-      ) : n
+      ) : null}
+    </Screen>
+  );
+}

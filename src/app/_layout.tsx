@@ -12,6 +12,7 @@ import { useEffect, useRef } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AuthProvider, useAuth } from "@/data/authStore";
+import { BillingProvider } from "@/data/billingStore";
 import { HustlesProvider } from "@/data/hustleStore";
 import { TransactionsProvider } from "@/data/store";
 import { UserProvider } from "@/data/userStore";
@@ -51,7 +52,9 @@ function StackHost() {
         headerShown: false,
         contentStyle: { backgroundColor: colors.canvas },
       }}
-    />
+    >
+      <Stack.Screen name="paywall" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+    </Stack>
   );
 }
 
@@ -78,11 +81,13 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <AuthProvider>
           <UserProvider>
-            <HustlesProvider>
-              <TransactionsProvider>
-                <StackHost />
-              </TransactionsProvider>
-            </HustlesProvider>
+            <BillingProvider>
+              <HustlesProvider>
+                <TransactionsProvider>
+                  <StackHost />
+                </TransactionsProvider>
+              </HustlesProvider>
+            </BillingProvider>
           </UserProvider>
         </AuthProvider>
       </SafeAreaProvider>

@@ -6,7 +6,8 @@ import { Animated, Easing, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Text } from "@/components";
-import { extractReceipt } from "@/lib/extract";
+import { useBilling } from "@/data/billingStore";
+import { extractReceipt, QuotaError } from "@/lib/extract";
 
 const BG = "#07090F";
 const GREEN = "#2FD27E";
@@ -15,6 +16,7 @@ const billie = require("../../../assets/images/cute_billie_transparent_cropped.p
 export default function Processing() {
   const params = useLocalSearchParams<{ uri?: string }>();
   const uri = typeof params.uri === "string" ? params.uri : undefined;
+  const { recordScan } = useBilling();
 
   const float = useRef(new Animated.Value(0)).current;
   const glow = useRef(new Animated.Value(0)).current;
@@ -42,6 +44,7 @@ export default function Processing() {
       try {
         const e = await extractReceipt(uri);
         if (cancelled) return;
+        recordScan(); // count this AI scan against the monthly free allowance
         router.replace({
           pathname: "/capture/review",
           params: {
@@ -57,6 +60,11 @@ export default function Processing() {
         });
       } catch (err) {
         if (cancelled) return;
+        // Over the monthly quota (backend 402) -> show the paywall instead of an error.
+        if (err instanceof QuotaError) {
+          router.replace("/paywall");
+          return;
+        }
         const msg = err instanceof Error ? err.message : "Extraction failed";
         router.replace({ pathname: "/capture/review", params: { uri, error: msg } });
       }

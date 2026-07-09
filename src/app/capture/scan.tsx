@@ -6,6 +6,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Text } from "@/components";
+import { useBilling } from "@/data/billingStore";
 import { captureReceipt } from "@/lib/receipt";
 
 const BG = "#07090F";
@@ -16,8 +17,14 @@ const HEAD = "#2A3343";
 
 export default function Scan() {
   const [flashOn, setFlashOn] = useState(false);
+  const { canScan } = useBilling();
 
   const go = async (fromLibrary: boolean) => {
+    // AI scans are metered; manual entry (below) stays free.
+    if (!canScan) {
+      router.push("/paywall");
+      return;
+    }
     const uri = await captureReceipt(fromLibrary);
     if (uri) router.push({ pathname: "/capture/processing", params: { uri } });
   };
