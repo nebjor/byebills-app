@@ -61,15 +61,17 @@ export type Extracted = {
   confidence: number;
 };
 
-/** Thrown when the user is over their monthly scan quota (backend returns 402). */
+/** Thrown when the backend blocks a scan (402): daily cap hit or trial ended. */
 export class QuotaError extends Error {
   used?: number;
-  quota?: number;
-  constructor(message: string, used?: number, quota?: number) {
+  cap?: number;
+  reason?: string; // 'daily_cap' | 'trial_ended'
+  constructor(message: string, used?: number, cap?: number, reason?: string) {
     super(message);
     this.name = "QuotaError";
     this.used = used;
-    this.quota = quota;
+    this.cap = cap;
+    this.reason = reason;
   }
 }
 
@@ -140,7 +142,7 @@ async function extractViaBackend(uri: string, url: string, token: string): Promi
 
   if (res.status === 402) {
     const body = await res.json().catch(() => ({}));
-    throw new QuotaError("Monthly scan limit reached", body.used, body.quota);
+    throw new QuotaError(body.error ?? "Scan limit reached", body.used, body.cap, body.reason);
   }
   if (!res.ok) {
     const err = await res.text();

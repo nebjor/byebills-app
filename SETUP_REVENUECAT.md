@@ -5,8 +5,11 @@ This wires real subscriptions to the paywall. Today `src/data/billingStore.tsx`
 what to create in each dashboard and how to swap the mock for the SDK.
 
 Pricing decided: **CHF 8 / month** and **CHF 80 / year** (annual ≈ 2 months free).
-Free tier: **5 AI scans / month** (enforced client-side in `billingStore` + server-side
-in the quota RPC).
+Access model: **7-day Pro trial, then paid — no permanent free tier.** The trial is
+tracked client-side in `billingStore` (`trialStartedAt` + `TRIAL_DAYS`). When you wire
+RevenueCat, prefer a **store-side 7-day free trial (intro offer)** on both products so
+Apple/Google handle it: during the trial the `pro` entitlement is *active*, so the same
+"is `pro` active?" check covers trial **and** paid — server-side too.
 
 ---
 
@@ -116,14 +119,15 @@ In `paywall.tsx`, the `onStart` handler already calls `activatePro(selected)` �
 ---
 
 ## 7. Server side (already scaffolded)
-- The monthly free cap is enforced by the Supabase `consume_extraction` RPC (returns 402 when over quota); `extract.ts` maps that to `QuotaError` → the app shows the paywall.
-- To let Pro users bypass the cap server-side, have the backend check the user's `pro` entitlement. RevenueCat can push entitlement changes to Supabase via **webhooks** (write to a `user_entitlements` table), which the extract route already reads. Wire the RevenueCat webhook → a `/api/revenuecat/webhook` route that upserts `user_entitlements`.
+- With the **trial-then-paid** model (no free tier), the backend rule simplifies to: **allow a scan only if the `pro` entitlement is active** (RevenueCat marks it active during the free trial *and* while paid), else return 402 → `extract.ts` maps that to `QuotaError` → the app shows the paywall.
+- RevenueCat pushes entitlement changes to Supabase via **webhooks** → a `/api/revenuecat/webhook` route that upserts `public.user_entitlements` (`plan='pro'`, `valid_until`=period/trial end). The `quota_pro_bypass.sql` function already grants unlimited scans when `plan='pro'` and not expired.
+- Follow-up: since there is no free tier now, set the default `monthly_quota` to **0** in `user_entitlements` (or have the extract route require an active `pro` entitlement outright), so a user with no active entitlement can't scan via the backend.
 
 ---
 
 ## 8. Test checklist
 - iOS **Sandbox** tester account: buy monthly + annual, confirm `isPro` flips and the paywall closes.
 - Restore purchases on a fresh install → Pro returns.
-- Free user: after 5 scans in a month, the scan button routes to the paywall; next month it resets.
-- Cancel in Sandbox → entitlement expires → app reverts to free at period end.
+- New install: scanning works during the 7-day trial; after the trial the scan button routes to the paywall.
+- Cancel in Sandbox → entitlement expires → app blocks scanning (routes to paywall) at period end.
 ```

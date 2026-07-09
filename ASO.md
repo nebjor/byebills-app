@@ -75,7 +75,7 @@ Rechnung mit möglichst wenig Aufwand selber führen wollen.
 
 byeBills ist ein Werkzeug und ersetzt keine Steuerberatung.
 
-GRATIS testen: 5 Scans pro Monat gratis. byeBills Pro: unbegrenzte Scans für
+GRATIS testen: 7 Tage byeBills Pro gratis. Danach unbegrenzte Scans für
 CHF 8/Monat oder CHF 80/Jahr (2 Monate gratis).
 ```
 

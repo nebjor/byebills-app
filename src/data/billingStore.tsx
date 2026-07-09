@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   createContext,
   useCallback,
@@ -9,133 +8,127 @@ import {
   type ReactNode,
 } from "react";
 
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "./authStore";
+
 /**
- * Billing / entitlement + free-scan metering.
+ * Billing / entitlement — READ from the server, never the device.
  *
- * Free users get FREE_SCAN_LIMIT AI scans per calendar month; the counter
- * resets when the month rolls over. Manual transactions are always free and
- * never counted. Pro users are unlimited.
+ * The trial clock, plan and daily usage live in Supabase and are owned by
+ * SECURITY DEFINER functions keyed to auth.uid() (see trial_quota_setup.sql).
+ * The client can only *read* status via the extraction_status() RPC — it can
+ * never grant itself access or reset the trial. This store just mirrors that
+ * server state for the UI.
  *
- * The purchase itself is mocked for now (activatePro flips the flag locally).
- * When RevenueCat is wired, replace activatePro/restore with SDK calls and
- * hydrate `isPro` from the customer's entitlements — see SETUP_REVENUECAT.md.
- * Server-side enforcement still lives in the backend quota RPC; this client
- * counter is for UX (showing the paywall before a wasted round-trip).
+ * Caps: trial = 7 days / 30 scans per day; pro = 200/day; expired = 0.
+ * The real gate is the backend extract route (402); this is for display + a
+ * fast client-side pre-check.
  */
 
-export const FREE_SCAN_LIMIT = 5;
-
 export type Plan = "monthly" | "annual";
+export type EntitlementStatus = "trial" | "pro" | "expired";
 
-type BillingState = {
-  isPro: boolean;
-  plan: Plan | null;
-  month: string; // "YYYY-MM"
-  count: number; // scans used this month
+type StatusRow = {
+  status: EntitlementStatus;
+  trial_days_left: number;
+  used_today: number;
+  daily_cap: number;
+  remaining_today: number;
 };
 
-const STORAGE_KEY = "byebills:billing";
-
-function monthKey(d = new Date()): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-const DEFAULT: BillingState = { isPro: false, plan: null, month: monthKey(), count: 0 };
-
-/** Roll the counter to the current month if it belongs to a past month. */
-function rolled(s: BillingState): BillingState {
-  const now = monthKey();
-  return s.month === now ? s : { ...s, month: now, count: 0 };
-}
+// Optimistic default until the first server read returns (or when signed out).
+const DEFAULT_ROW: StatusRow = {
+  status: "trial",
+  trial_days_left: 7,
+  used_today: 0,
+  daily_cap: 30,
+  remaining_today: 30,
+};
 
 type BillingContextValue = {
+  loading: boolean;
   isPro: boolean;
-  plan: Plan | null;
-  freeLimit: number;
-  used: number;
-  remaining: number; // Infinity when Pro
+  isTrialActive: boolean;
+  trialEnded: boolean;
+  trialDaysLeft: number;
+  usedToday: number;
+  dailyCap: number;
+  remainingToday: number;
   canScan: boolean;
-  recordScan: () => void;
-  activatePro: (plan: Plan) => void;
-  restore: () => void;
-  cancelPro: () => void; // dev / testing helper
+  refresh: () => Promise<void>;
+  activatePro: (plan: Plan) => Promise<void>; // RevenueCat purchase point
+  restore: () => Promise<void>; // RevenueCat restore point
 };
 
 const BillingContext = createContext<BillingContextValue>({
+  loading: true,
   isPro: false,
-  plan: null,
-  freeLimit: FREE_SCAN_LIMIT,
-  used: 0,
-  remaining: FREE_SCAN_LIMIT,
+  isTrialActive: true,
+  trialEnded: false,
+  trialDaysLeft: 7,
+  usedToday: 0,
+  dailyCap: 30,
+  remainingToday: 30,
   canScan: true,
-  recordScan: () => {},
-  activatePro: () => {},
-  restore: () => {},
-  cancelPro: () => {},
+  refresh: async () => {},
+  activatePro: async () => {},
+  restore: async () => {},
 });
 
 export function BillingProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<BillingState>(DEFAULT);
+  const { session } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [row, setRow] = useState<StatusRow>(DEFAULT_ROW);
 
-  const persist = useCallback((next: BillingState) => {
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch(() => {});
-    return next;
-  }, []);
+  const refresh = useCallback(async () => {
+    if (!session) {
+      setLoading(false);
+      return;
+    }
+    try {
+      const { data, error } = await supabase.rpc("extraction_status").single<StatusRow>();
+      if (!error && data) setRow(data);
+    } catch {
+      // keep last known state; the backend 402 is still the real gate
+    } finally {
+      setLoading(false);
+    }
+  }, [session]);
 
-  // Load once, rolling the month forward if needed.
+  // Re-read whenever the session changes (sign in / out).
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((v) => {
-      if (!v) return;
-      try {
-        const loaded = rolled({ ...DEFAULT, ...JSON.parse(v) });
-        setState(loaded);
-        persist(loaded);
-      } catch {
-        // ignore malformed value
-      }
-    });
-  }, [persist]);
+    setLoading(true);
+    refresh();
+  }, [refresh]);
 
-  const recordScan = useCallback(() => {
-    setState((prev) => {
-      const r = rolled(prev);
-      if (r.isPro) return persist(r);
-      return persist({ ...r, count: r.count + 1 });
-    });
-  }, [persist]);
+  // RevenueCat goes here: purchase/restore the package, then refresh from the
+  // server so `status` reflects the new entitlement. Mocked as a refresh for now.
+  const activatePro = useCallback(async (_plan: Plan) => {
+    await refresh();
+  }, [refresh]);
 
-  const activatePro = useCallback(
-    (plan: Plan) => {
-      setState((prev) => persist({ ...rolled(prev), isPro: true, plan }));
-    },
-    [persist],
-  );
-
-  const restore = useCallback(() => {
-    // Mock: with RevenueCat this re-reads entitlements from the store.
-    setState((prev) => persist(rolled(prev)));
-  }, [persist]);
-
-  const cancelPro = useCallback(() => {
-    setState((prev) => persist({ ...rolled(prev), isPro: false, plan: null }));
-  }, [persist]);
+  const restore = useCallback(async () => {
+    await refresh();
+  }, [refresh]);
 
   const value = useMemo<BillingContextValue>(() => {
-    const r = rolled(state);
-    const remaining = r.isPro ? Infinity : Math.max(0, FREE_SCAN_LIMIT - r.count);
+    const isPro = row.status === "pro";
+    const isTrialActive = row.status === "trial";
     return {
-      isPro: r.isPro,
-      plan: r.plan,
-      freeLimit: FREE_SCAN_LIMIT,
-      used: r.count,
-      remaining,
-      canScan: r.isPro || r.count < FREE_SCAN_LIMIT,
-      recordScan,
+      loading,
+      isPro,
+      isTrialActive,
+      trialEnded: row.status === "expired",
+      trialDaysLeft: row.trial_days_left,
+      usedToday: row.used_today,
+      dailyCap: row.daily_cap,
+      remainingToday: row.remaining_today,
+      canScan: (isPro || isTrialActive) && row.remaining_today > 0,
+      refresh,
       activatePro,
       restore,
-      cancelPro,
     };
-  }, [state, recordScan, activatePro, restore, cancelPro]);
+  }, [loading, row, refresh, activatePro, restore]);
 
   return <BillingContext.Provider value={value}>{children}</BillingContext.Provider>;
 }

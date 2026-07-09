@@ -68,7 +68,7 @@ export default function Profile() {
   const styles = useThemedStyles(makeStyles);
   const { user } = useUser();
   const { signOut, session } = useAuth();
-  const { isPro, plan, used, freeLimit, cancelPro } = useBilling();
+  const { isPro, isTrialActive, trialDaysLeft } = useBilling();
   const [checking, setChecking] = useState(false);
 
   const onSignOut = () => {
@@ -155,7 +155,11 @@ export default function Profile() {
             </Text>
             <View style={[styles.tag, isPro && { backgroundColor: colors.purpleTint }]}>
               <Text weight="bold" color={isPro ? colors.purpleInk : colors.brandInk} style={styles.tagText}>
-                {isPro ? `Side hustler · Pro (${plan === "annual" ? "yearly" : "monthly"})` : "Side hustler · Free plan"}
+                {isPro
+                  ? "Side hustler · Pro"
+                  : isTrialActive
+                    ? `Side hustler · Free trial (${trialDaysLeft}d left)`
+                    : "Side hustler · Trial ended"}
               </Text>
             </View>
           </View>
@@ -205,38 +209,38 @@ export default function Profile() {
           SUBSCRIPTION
         </Text>
         <Card flush style={styles.menu}>
-          {!isPro ? (
-            <>
-              <Pressable style={styles.row} onPress={() => router.push("/paywall")}>
-                <View style={[styles.iconWrap, { backgroundColor: colors.purpleTint }]}>
-                  <Text style={styles.icon}>⭐</Text>
-                </View>
-                <View style={styles.flex}>
-                  <Text weight="bold" style={styles.rowLabel}>
-                    Upgrade to Pro
-                  </Text>
-                  <Text variant="small" color={colors.ink600}>
-                    {used} of {freeLimit} free scans used this month
-                  </Text>
-                </View>
-                <Text color={colors.ink400} style={styles.chevron}>
-                  ›
+          {isPro ? (
+            <Pressable style={styles.row} onPress={onManageSubscription}>
+              <View style={styles.iconWrap}>
+                <Text style={styles.icon}>💳</Text>
+              </View>
+              <Text weight="bold" style={[styles.rowLabel, styles.flex]}>
+                Manage subscription
+              </Text>
+              <Text color={colors.ink400} style={styles.chevron}>
+                ›
+              </Text>
+            </Pressable>
+          ) : (
+            <Pressable style={styles.row} onPress={() => router.push("/paywall")}>
+              <View style={[styles.iconWrap, { backgroundColor: colors.purpleTint }]}>
+                <Text style={styles.icon}>⭐</Text>
+              </View>
+              <View style={styles.flex}>
+                <Text weight="bold" style={styles.rowLabel}>
+                  Upgrade to Pro
                 </Text>
-              </Pressable>
-              <View style={styles.divider} />
-            </>
-          ) : null}
-          <Pressable style={styles.row} onPress={onManageSubscription}>
-            <View style={styles.iconWrap}>
-              <Text style={styles.icon}>💳</Text>
-            </View>
-            <Text weight="bold" style={[styles.rowLabel, styles.flex]}>
-              Manage subscription
-            </Text>
-            <Text color={colors.ink400} style={styles.chevron}>
-              ›
-            </Text>
-          </Pressable>
+                <Text variant="small" color={colors.ink600}>
+                  {isTrialActive
+                    ? `${trialDaysLeft} ${trialDaysLeft === 1 ? "day" : "days"} left in your free trial`
+                    : "Your free trial has ended"}
+                </Text>
+              </View>
+              <Text color={colors.ink400} style={styles.chevron}>
+                ›
+              </Text>
+            </Pressable>
+          )}
         </Card>
 
         <Text variant="label" color={colors.ink400} style={styles.sectionLabel}>
@@ -281,21 +285,13 @@ export default function Profile() {
         <Button label="Sign out" variant="destructive" fullWidth style={styles.signOut} onPress={onSignOut} />
 
         {__DEV__ ? (
-          <>
-            <Button
-              label="Reset onboarding (dev)"
-              variant="tertiary"
-              fullWidth
-              style={styles.signOut}
-              onPress={onResetOnboarding}
-            />
-            <Button
-              label={isPro ? "Cancel Pro (dev)" : "Activate Pro (dev)"}
-              variant="tertiary"
-              fullWidth
-              onPress={() => (isPro ? cancelPro() : router.push("/paywall"))}
-            />
-          </>
+          <Button
+            label="Reset onboarding (dev)"
+            variant="tertiary"
+            fullWidth
+            style={styles.signOut}
+            onPress={onResetOnboarding}
+          />
         ) : (
           <Button
             label="Delete account"
