@@ -17,12 +17,48 @@ import {
   patchTransaction,
   pushTransaction,
   rowToTransaction,
+  uploadReceipt,
 } from "@/lib/remote";
 import { supabase } from "@/lib/supabase";
 
 import { transactions as seed, type Transaction } from "./mock";
 
 const STORAGE_KEY = "byebills:transactions";
+
+/**
+ * Fold a server row into what this device already knows.
+ *
+ * The server is authoritative for the data, but NOT for `imageUri` — that's a
+ * file:// path only this device can open, and the server has never heard of it.
+ * Taking the remote row wholesale would blank the photo in the detail screen
+ * and drop it from the ZIP export.
+ */
+function mergeLocalImage(remote: Transaction, local?: Transaction): Transaction {
+  if (!local) return remote;
+  return {
+    ...remote,
+    imageUri: local.imageUri ?? remote.imageUri,
+    imagePath: remote.imagePath ?? local.imagePath,
+  };
+}
+
+/**
+ * Push a transaction the server has never seen (created offline, or before
+ * sync existed). Its photo has never been uploaded either, so do that first —
+ * otherwise the row syncs with image_path null and the receipt stays trapped
+ * on this phone.
+ */
+async function syncLocalOnly(t: Transaction, userId: string) {
+  try {
+    let imagePath = t.imagePath ?? null;
+    if (!imagePath && t.imageUri?.startsWith("file://")) {
+      imagePath = await uploadReceipt(t.imageUri, t.id, userId);
+    }
+    await pushTransaction(t, userId, imagePath);
+  } catch {
+    // Offline or storage hiccup — we retry on the next launch.
+  }
+}
 
 /**
  * Transactions.
@@ -86,12 +122,21 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
 
       setTransactions((local) => {
-        // Union by id. Anything created offline exists only locally, so push it
-        // up rather than letting the server's view silently delete it.
+        const byId = new Map(local.map((t) => [t.id, t]));
+
+        // Keep this device's local photo when folding in the server's copy —
+        // the remote row only knows a storage path, and dropping the file://
+        // URI would blank the image everywhere it's rendered.
+        const merged = remote.map((r) => mergeLocalImage(r, byId.get(r.id)));
+
+        // Anything created offline exists only locally, so push it up rather
+        // than letting the server's view silently delete it. Photos captured
+        // offline still need uploading, so send the local URI along.
         const remoteIds = new Set(remote.map((t) => t.id));
         const localOnly = local.filter((t) => !remoteIds.has(t.id));
-        for (const t of localOnly) void pushTransaction(t, userId).catch(() => {});
-        return [...remote, ...localOnly].sort((a, b) => b.date.localeCompare(a.date));
+        for (const t of localOnly) void syncLocalOnly(t, userId);
+
+        return [...merged, ...localOnly].sort((a, b) => b.date.localeCompare(a.date));
       });
       setSyncing(false);
     })();
@@ -124,7 +169,9 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
               return [incoming, ...prev].sort((a, b) => b.date.localeCompare(a.date));
             }
             const next = [...prev];
-            next[idx] = incoming;
+            // Postgres echoes our own INSERT straight back. Merging (rather
+            // than replacing) keeps the local file:// photo we just captured.
+            next[idx] = mergeLocalImage(incoming, prev[idx]);
             return next;
           });
         },
@@ -162,8 +209,10 @@ export function TransactionsProvider({ children }: { children: ReactNode }) {
 
   const add = useCallback(
     (t: Transaction, imagePath?: string | null) => {
-      setTransactions((prev) => [t, ...prev]);
-      if (userId) void pushTransaction(t, userId, imagePath).catch(() => {});
+      // Keep the path on the row too, so a later re-sync doesn't blank it.
+      const row: Transaction = { ...t, imagePath: imagePath ?? t.imagePath };
+      setTransactions((prev) => [row, ...prev]);
+      if (userId) void pushTransaction(row, userId, imagePath).catch(() => {});
     },
     [userId],
   );

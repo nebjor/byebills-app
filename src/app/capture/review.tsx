@@ -161,6 +161,7 @@ export default function Review() {
         group: groupForDate(savedIso),
         date: savedIso,
         imageUri: storedUri,
+        imagePath: imagePath ?? undefined,
       },
       imagePath,
     );

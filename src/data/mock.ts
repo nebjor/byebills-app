@@ -13,7 +13,17 @@ export type Transaction = {
   hustleId: string;
   group: string; // date group label
   date: string; // ISO date (YYYY-MM-DD…)
-  imageUri?: string; // captured receipt photo
+  /** Locally openable receipt photo — a file:// path on THIS device. */
+  imageUri?: string;
+  /**
+   * Storage object path in the private `receipts` bucket (`<user_id>/<id>.jpg`).
+   *
+   * Deliberately separate from imageUri: a row synced from another device has a
+   * path but no local file, and a row created offline has a file but no path.
+   * Never assign one to the other — a storage path is not openable by
+   * FileSystem, and a file:// URI is meaningless on another device.
+   */
+  imagePath?: string;
 };
 
 export type BudgetCategory = {

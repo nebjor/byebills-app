@@ -1,7 +1,7 @@
 import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { Button, Screen, Text, TextField } from "@/components";
@@ -9,6 +9,7 @@ import { useHustles } from "@/data/hustleStore";
 import { useTransactions } from "@/data/store";
 import { formatDate, groupForDate, parseISODate, toISODate } from "@/lib/date";
 import { deleteReceipt } from "@/lib/receipt";
+import { receiptUrl } from "@/lib/remote";
 import { type Palette, radii, useTheme, useThemedStyles } from "@/theme";
 
 const makeStyles = (c: Palette) =>
@@ -76,6 +77,27 @@ export default function TransactionDetail() {
   const [date, setDate] = useState<Date>(() => parseISODate(tx?.date));
   const [showPicker, setShowPicker] = useState(false);
 
+  // Prefer this device's local copy; fall back to a signed URL for a receipt
+  // that was scanned on another device (or on the web).
+  const [photoUri, setPhotoUri] = useState<string | undefined>(tx?.imageUri);
+  useEffect(() => {
+    if (tx?.imageUri) {
+      setPhotoUri(tx.imageUri);
+      return;
+    }
+    if (!tx?.imagePath) {
+      setPhotoUri(undefined);
+      return;
+    }
+    let cancelled = false;
+    receiptUrl(tx.imagePath).then((url) => {
+      if (!cancelled) setPhotoUri(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tx?.imageUri, tx?.imagePath]);
+
   if (!tx) {
     return (
       <Screen>
@@ -133,8 +155,8 @@ export default function TransactionDetail() {
           <Text variant="h2">Edit transaction</Text>
         </View>
 
-        {tx.imageUri ? (
-          <Image source={{ uri: tx.imageUri }} style={styles.photo} contentFit="cover" />
+        {photoUri ? (
+          <Image source={{ uri: photoUri }} style={styles.photo} contentFit="cover" />
         ) : null}
 
         {/* Type */}

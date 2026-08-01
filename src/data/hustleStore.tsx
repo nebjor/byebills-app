@@ -10,7 +10,7 @@ import {
 } from "react";
 
 import { useAuth } from "@/data/authStore";
-import { fetchHustles, pushHustles } from "@/lib/remote";
+import { fetchHustles, pushHustles, replaceHustles } from "@/lib/remote";
 
 import { hustles as seed, type Hustle } from "./mock";
 
@@ -75,7 +75,9 @@ export function HustlesProvider({ children }: { children: ReactNode }) {
     (h: Hustle[]) => {
       setH(h);
       AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(h)).catch(() => {});
-      if (userId) void pushHustles(h, userId).catch(() => {});
+      // Replace, not upsert — this is the authoritative edited set, so a hustle
+      // the user removed must actually disappear rather than resurface on sync.
+      if (userId) void replaceHustles(h, userId).catch(() => {});
     },
     [userId],
   );

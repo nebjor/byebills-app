@@ -70,13 +70,18 @@ export function rowToTransaction(row: TransactionRow): Transaction {
     hustleId: row.hustle_id,
     group: groupForDate(row.date),
     date: row.date,
-    // A remote row carries a storage PATH; the local `imageUri` is resolved
-    // lazily to a signed URL by receiptUrl() when a screen actually shows it.
-    imageUri: row.image_path ?? undefined,
+    // A remote row only knows the storage PATH. `imageUri` stays undefined —
+    // the caller merges in a local file:// URI if this device has one, and
+    // screens call receiptUrl(imagePath) to get a viewable URL otherwise.
+    imagePath: row.image_path ?? undefined,
   };
 }
 
-export function transactionToRow(t: Transaction, userId: string, imagePath?: string | null): TransactionRow {
+export function transactionToRow(
+  t: Transaction,
+  userId: string,
+  imagePath?: string | null,
+): TransactionRow {
   return {
     user_id: userId,
     id: t.id,
@@ -86,7 +91,9 @@ export function transactionToRow(t: Transaction, userId: string, imagePath?: str
     status: t.status,
     hustle_id: t.hustleId,
     date: t.date,
-    image_path: imagePath ?? null,
+    // Fall back to whatever the row already carries, so re-syncing an existing
+    // transaction never blanks out a photo that was uploaded earlier.
+    image_path: imagePath ?? t.imagePath ?? null,
     updated_at: new Date().toISOString(),
   };
 }
@@ -213,6 +220,21 @@ export async function pushHustles(hustles: Hustle[], userId: string) {
   }));
   const { error } = await supabase.from("app_hustles").upsert(rows, { onConflict: "user_id,id" });
   if (error) throw new Error(error.message);
+}
+
+/**
+ * Replace the user's hustles with exactly this set.
+ *
+ * Upsert alone can't express a removal, so a hustle deleted on one device
+ * would reappear on the next sync. Used by the editing paths; the merge-on-
+ * launch path uses pushHustles() so it never deletes what it hasn't seen.
+ */
+export async function replaceHustles(hustles: Hustle[], userId: string) {
+  await pushHustles(hustles, userId);
+  const keep = hustles.map((h) => h.id);
+  let q = supabase.from("app_hustles").delete().eq("user_id", userId);
+  if (keep.length) q = q.not("id", "in", `(${keep.map((id) => `"${id}"`).join(",")})`);
+  await q;
 }
 
 // ---------- Profile ----------
