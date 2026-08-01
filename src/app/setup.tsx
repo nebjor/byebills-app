@@ -5,6 +5,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View
 
 import { Button, Screen, Text, TextField } from "@/components";
 import { useHustles } from "@/data/hustleStore";
+import { useUser } from "@/data/userStore";
 import { type Palette, radii, useTheme, useThemedStyles } from "@/theme";
 
 type Hustle = { id: string; name: string; color: string };
@@ -40,6 +41,7 @@ export default function HustlesStep() {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const { setHustles: saveHustles } = useHustles();
+  const { completeOnboarding } = useUser();
   const palette = [colors.brand, colors.purple, colors.info, colors.warning, colors.error, "#0EA5A5"];
 
   const [draft, setDraft] = useState("");
@@ -48,6 +50,8 @@ export default function HustlesStep() {
   const onContinue = async () => {
     if (hustles.length) saveHustles(hustles);
     await AsyncStorage.setItem("byebills:onboarded", "1");
+    // Also record it server-side so the web app doesn't ask again on this account.
+    await completeOnboarding();
     router.replace("/dashboard");
   };
 

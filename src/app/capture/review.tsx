@@ -12,6 +12,7 @@ import { track } from "@/lib/analytics";
 import { formatDate, groupForDate, parseISODate, toISODate } from "@/lib/date";
 import { scheduleDailyScanReminder } from "@/lib/notifications";
 import { persistReceipt } from "@/lib/receipt";
+import { currentUserId, uploadReceipt } from "@/lib/remote";
 import { type Palette, radii, useTheme, useThemedStyles } from "@/theme";
 
 const ASKED_KEY = "byebills:askedDailyScan";
@@ -132,24 +133,37 @@ export default function Review() {
     const savedIso = toISODate(date);
     const id = String(Date.now());
     let storedUri = uri;
+    let imagePath: string | null = null;
     if (uri) {
       try {
         storedUri = await persistReceipt(uri, id);
       } catch {
         // keep the original uri if persisting fails
       }
+      // Upload a copy so the photo travels with the row to the web app — a
+      // device-local file:// URI means nothing on another device. Best-effort:
+      // a failed upload must never block saving the transaction.
+      try {
+        const userId = await currentUserId();
+        if (userId) imagePath = await uploadReceipt(storedUri ?? uri, id, userId);
+      } catch {
+        // offline or storage hiccup — the local copy still works here
+      }
     }
-    add({
-      id,
-      title: merchant.trim() || "Receipt",
-      meta: category.trim() || "Expense",
-      amount: type === "expense" ? -Math.abs(num) : Math.abs(num),
-      status: "pending",
-      hustleId: hustleId || "free",
-      group: groupForDate(savedIso),
-      date: savedIso,
-      imageUri: storedUri,
-    });
+    add(
+      {
+        id,
+        title: merchant.trim() || "Receipt",
+        meta: category.trim() || "Expense",
+        amount: type === "expense" ? -Math.abs(num) : Math.abs(num),
+        status: "pending",
+        hustleId: hustleId || "free",
+        group: groupForDate(savedIso),
+        date: savedIso,
+        imageUri: storedUri,
+      },
+      imagePath,
+    );
     track("transaction_saved", { scanned, type });
 
     try {
